@@ -1,52 +1,44 @@
-from flask import Flask, jsonify  # <-- Corregido: jsonify
+from http.server import BaseHTTPRequestHandler
 import cloudscraper
 from bs4 import BeautifulSoup
+import json
 
-app = Flask(__name__)
+class handler(BaseHTTPRequestHandler):
 
-def scraper_investing(url):
-    # Configuramos el scraper para saltar el 403
-    scraper = cloudscraper.create_scraper(
-        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-    )
-    try:
-        # Añadimos un User-Agent real para mayor seguridad
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-        res = scraper.get(url, headers=headers, timeout=10)
-        
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
-            # Buscamos el precio con el selector de Investing
-            tag = soup.find("div", {"data-test": "instrument-price-last"})
-            if tag:
-                # Limpiamos el texto (quitamos comas y espacios)
-                return tag.get_text(strip=True).replace(',', '')
-        return "0.00"
-    except:
-        return "0.00"
+    def obtener_precio(self, url):
+        # Usamos cloudscraper para saltar el muro de Investing
+        scraper = cloudscraper.create_scraper(browser='chrome')
+        try:
+            res = scraper.get(url, timeout=10)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, "html.parser")
+                # Buscamos el precio en el div de siempre
+                tag = soup.find("div", {"data-test": "instrument-price-last"})
+                if tag:
+                    return tag.get_text(strip=True).replace(',', '')
+            return "0.00"
+        except:
+            return "0.00"
 
-@app.route('/')
-def home():
-    # Definimos las URLs de los minerales
-    hierro_url = "https://www.investing.com/commodities/iron-ore-62-cfr-futures"
-    carbon_url = "https://www.investing.com/commodities/coal-cme-futures"
-    
-    # Creamos el diccionario con los datos reales
-    datos = {
-        "hierro": {
-            "nombre": "Hierro 62% CFR",
-            "precio": scraper_investing(hierro_url)
-        },
-        "carbon": {
-            "nombre": "Carbón CME",
-            "precio": scraper_investing(carbon_url)
-        },
-        "status": "online"
-    }
-    
-    # Devolvemos el JSON a la web de InfinityFree
-    return jsonify(datos)
+    def do_GET(self):
+        # 1. Configuramos las URLs
+        hierro_url = "https://www.investing.com/commodities/iron-ore-62-cfr-futures"
+        carbon_url = "https://www.investing.com/commodities/coal-cme-futures"
 
-# Esto es necesario para correrlo en local/Codespaces
-if __name__ == "__main__":
-    app.run(debug=True)
+        # 2. Obtenemos los datos
+        datos = {
+            "hierro": self.obtener_precio(hierro_url),
+            "carbon": self.obtener_precio(carbon_url),
+            "status": "online"
+        }
+
+        # 3. Respondemos al navegador/PHP
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        # Esto permite que tu PHP o cualquier web lea los datos sin bloqueos
+        self.send_header('Access-Control-Allow-Origin', '*') 
+        self.end_headers()
+
+        # Enviamos el JSON puro
+        self.wfile.write(json.dumps(datos).encode('utf-8'))
+        return
