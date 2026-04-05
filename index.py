@@ -1,53 +1,52 @@
+from flask import Flask, jsonify  # <-- Corregido: jsonify
 import cloudscraper
 from bs4 import BeautifulSoup
-import time
 
-# Configuración de URLs de Investing
-URLS = {
-    "Hierro (Iron Ore)": "https://es.investing.com/commodities/iron-ore-62-cfr-futures",
-    "Carbón (Newcastle)": "https://es.investing.com/commodities/newcastle-coal-futures"
-}
+app = Flask(__name__)
 
-def obtener_precio(nombre, url):
-    # Creamos el scraper
-    scraper = cloudscraper.create_scraper()
-    
-    print(f"Consultando {nombre}...")
-    
+def scraper_investing(url):
+    # Configuramos el scraper para saltar el 403
+    scraper = cloudscraper.create_scraper(
+        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+    )
     try:
-        # Hacemos la petición
-        res = scraper.get(url, timeout=15)
+        # Añadimos un User-Agent real para mayor seguridad
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        res = scraper.get(url, headers=headers, timeout=10)
         
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
-            
-            # Selector de Investing para el precio actual
-            # Usamos data-test para que sea más preciso
-            tag_precio = soup.find("div", {"data-test": "instrument-price-last"})
-            
-            if tag_precio:
-                precio_texto = tag_precio.get_text(strip=True)
-                return precio_texto
-            else:
-                return "❌ No se encontró el tag del precio"
-        else:
-            return f"❌ Error HTTP {res.status_code}"
-            
-    except Exception as e:
-        return f"❌ Error de conexión: {str(e)}"
+            # Buscamos el precio con el selector de Investing
+            tag = soup.find("div", {"data-test": "instrument-price-last"})
+            if tag:
+                # Limpiamos el texto (quitamos comas y espacios)
+                return tag.get_text(strip=True).replace(',', '')
+        return "0.00"
+    except:
+        return "0.00"
 
-def ejecutar_test():
-    print("=== TEST DE PRECIOS INFOMIN (Investing + CloudScraper) ===")
-    print("-" * 50)
+@app.route('/')
+def home():
+    # Definimos las URLs de los minerales
+    hierro_url = "https://www.investing.com/commodities/iron-ore-62-cfr-futures"
+    carbon_url = "https://www.investing.com/commodities/coal-cme-futures"
     
-    for nombre, url in URLS.items():
-        resultado = obtener_precio(nombre, url)
-        print(f"{nombre}: {resultado}")
-        # Un pequeño delay para no saturar y parecer más humano
-        time.sleep(2)
-        
-    print("-" * 50)
-    print("Test finalizado.")
+    # Creamos el diccionario con los datos reales
+    datos = {
+        "hierro": {
+            "nombre": "Hierro 62% CFR",
+            "precio": scraper_investing(hierro_url)
+        },
+        "carbon": {
+            "nombre": "Carbón CME",
+            "precio": scraper_investing(carbon_url)
+        },
+        "status": "online"
+    }
+    
+    # Devolvemos el JSON a la web de InfinityFree
+    return jsonify(datos)
 
+# Esto es necesario para correrlo en local/Codespaces
 if __name__ == "__main__":
-    ejecutar_test()
+    app.run(debug=True)
