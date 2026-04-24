@@ -62,16 +62,14 @@ class handler(BaseHTTPRequestHandler):
                     # 1. Limpiamos el texto original (quitamos comas o espacios que traiga la web)
                     valor_sucio = tag.get_text(strip=True).replace(',', '')
                     try:
-                        # 2. Convertimos a número decimal
+                        # 2. Convertimos a número
                         numero = float(valor_sucio)
                         
-                        # 3. Formateamos: Miles con punto y decimales con coma
-                        # Primero usamos el formato americano estándar (comma for thousands, dot for decimal)
-                        # Y luego invertimos los símbolos.
-                        formato_inicial = "{:,.2f}".format(numero)
-                        valor_final = formato_inicial.replace(',', 'X').replace('.', ',').replace('X', '.')
+                        # 3. Formateamos a 2 decimales y cambiamos punto por coma
+                        # Esto transforma 116.45 en "116,45"
+                        valor_final = "{:.2f}".format(numero).replace('.', ',')
                         
-                        print(f"VALOR FORMATEADO: {valor_final}")
+                        print(f"VALOR PROCESADO: {valor_final}")
                         return valor_final
                     except:
                         return valor_sucio
@@ -81,7 +79,6 @@ class handler(BaseHTTPRequestHandler):
             return f"Error_{res.status_code}"
             
         except Exception as e:
-            print(f"ERROR: {str(e)}")
             return "Error_Excepcion"
 
     def do_GET(self):
