@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler
 import cloudscraper
 from bs4 import BeautifulSoup
 
-# Cache global para proteger la IP de Vercel y evitar bloqueos
+# Cache global para proteger la IP de Vercel
 cache_investing = {
     "hierro": None,
     "carbon": None,
@@ -16,7 +16,6 @@ cache_investing = {
 class handler(BaseHTTPRequestHandler):
 
     def obtener_precio(self, url):
-        # 1. Configuramos el scraper
         scraper = cloudscraper.create_scraper(
             delay=20, 
             browser={
@@ -27,61 +26,50 @@ class handler(BaseHTTPRequestHandler):
         )
         
         try:
-            # 2. Headers de camuflaje total
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Language': 'es-ES,es;q=0.9',
                 'Referer': 'https://www.google.com/',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
                 'Upgrade-Insecure-Requests': '1',
-                'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                'sec-ch-ua-platform': '"Windows"',
                 'Cookie': 'edition_redirect=1; gtm_id=GTM-PG97WS;'
             }
             
-            # Pausa aleatoria para no parecer bot
-            pausa = random.uniform(5.5, 10.5)
-            print(f"Esperando {pausa:.2f}s...")
-            time.sleep(pausa)
+            # Pausa para evitar detección
+            time.sleep(random.uniform(5.5, 10.5))
             
             res = scraper.get(url, headers=headers, timeout=40)
             
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, "html.parser")
                 
-                # Buscamos el precio
                 tag = soup.find("div", {"data-test": "instrument-price-last"}) or \
                       soup.select_one('span[data-test="instrument-price-last"]') or \
                       soup.find("span", {"id": "last_last"})
                 
                 if tag:
-                    # --- LÓGICA DE FORMATO CORREGIDA PARA CIENES ---
-                    # 1. Quitamos cualquier coma que traiga la web por defecto
-                    valor_sucio = tag.get_text(strip=True).replace(',', '')
+                    # --- LÓGICA DE COMA EN LOS ÚLTIMOS 2 DÍGITOS ---
+                    # 1. Quitamos comas y espacios que traiga Investing de origen
+                    texto_limpio = tag.get_text(strip=True).replace(',', '')
                     
                     try:
-                        # 2. Convertimos a número decimal
-                        numero = float(valor_sucio)
+                        # 2. Convertimos a flotante
+                        numero = float(texto_limpio)
                         
-                        # 3. Formateamos a 2 decimales fijos y cambiamos el PUNTO por COMA
-                        # Usamos {:.2f} (sin la coma de miles)
+                        # 3. Forzamos 2 decimales y cambiamos el punto por la coma
+                        # Esto asegura que 102.5 se convierta en 102,50
                         valor_final = "{:.2f}".format(numero).replace('.', ',')
                         
-                        print(f"VALOR CORRECTO: {valor_final}")
+                        print(f"EXITO: {valor_final}")
                         return valor_final
                     except:
-                        # Si no es un número, devolvemos el texto limpio
-                        return valor_sucio
+                        return texto_limpio
                 
                 return "Tag_No_Encontrado"
             
             return f"Error_{res.status_code}"
             
         except Exception as e:
-            print(f"ERROR: {str(e)}")
             return "Error_Excepcion"
 
     def do_GET(self):
@@ -96,19 +84,19 @@ class handler(BaseHTTPRequestHandler):
         if cache_investing["hierro"] and (ahora - cache_investing["timestamp"] < TIEMPO_CACHE):
             h_val = cache_investing["hierro"]
             c_val = cache_investing["carbon"]
-            fuente = "Caché interna (Ahorro créditos)"
+            fuente = "Caché"
         else:
             h_val = self.obtener_precio(hierro_url)
-            time.sleep(random.uniform(4, 7)) # Pausa entre peticiones
+            time.sleep(random.uniform(4, 7))
             c_val = self.obtener_precio(carbon_url)
             
             if "Error" not in h_val and "Error" not in c_val:
                 cache_investing["hierro"] = h_val
                 cache_investing["carbon"] = c_val
                 cache_investing["timestamp"] = ahora
-                fuente = "Investing.com (Actualizado)"
+                fuente = "Investing Actualizado"
             else:
-                fuente = "Error/Bloqueo detectado"
+                fuente = "Error de Bloqueo"
 
         datos = {
             "hierro": h_val,
