@@ -58,20 +58,22 @@ class handler(BaseHTTPRequestHandler):
                       soup.find("span", {"id": "last_last"})
                 
                 if tag:
-                    # --- LÓGICA DE FORMATO (PUNTO Y COMA) ---
-                    # 1. Limpiamos el texto original (quitamos comas o espacios que traiga la web)
+                    # --- LÓGICA DE FORMATO CORREGIDA PARA CIENES ---
+                    # 1. Quitamos cualquier coma que traiga la web por defecto
                     valor_sucio = tag.get_text(strip=True).replace(',', '')
+                    
                     try:
-                        # 2. Convertimos a número
+                        # 2. Convertimos a número decimal
                         numero = float(valor_sucio)
                         
-                        # 3. Formateamos a 2 decimales y cambiamos punto por coma
-                        # Esto transforma 116.45 en "116,45"
+                        # 3. Formateamos a 2 decimales fijos y cambiamos el PUNTO por COMA
+                        # Usamos {:.2f} (sin la coma de miles)
                         valor_final = "{:.2f}".format(numero).replace('.', ',')
                         
-                        print(f"VALOR PROCESADO: {valor_final}")
+                        print(f"VALOR CORRECTO: {valor_final}")
                         return valor_final
                     except:
+                        # Si no es un número, devolvemos el texto limpio
                         return valor_sucio
                 
                 return "Tag_No_Encontrado"
@@ -79,6 +81,7 @@ class handler(BaseHTTPRequestHandler):
             return f"Error_{res.status_code}"
             
         except Exception as e:
+            print(f"ERROR: {str(e)}")
             return "Error_Excepcion"
 
     def do_GET(self):
