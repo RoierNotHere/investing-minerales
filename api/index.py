@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler
 import cloudscraper
 from bs4 import BeautifulSoup
 
-# Cache global para proteger la IP de Vercel y evitar bloqueos por repetición
+# Cache global para proteger la IP de Vercel y evitar bloqueos
 cache_investing = {
     "hierro": None,
     "carbon": None,
@@ -16,7 +16,7 @@ cache_investing = {
 class handler(BaseHTTPRequestHandler):
 
     def obtener_precio(self, url):
-        # 1. Configuramos el scraper con un delay alto para que Cloudflare no sospeche
+        # 1. Configuramos el scraper
         scraper = cloudscraper.create_scraper(
             delay=20, 
             browser={
@@ -27,7 +27,7 @@ class handler(BaseHTTPRequestHandler):
         )
         
         try:
-            # 2. Headers de "Navegador Humano" actualizado
+            # 2. Headers de camuflaje total
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
@@ -36,18 +36,15 @@ class handler(BaseHTTPRequestHandler):
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-User': '?1',
                 'Upgrade-Insecure-Requests': '1',
                 'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
                 'sec-ch-ua-platform': '"Windows"',
-                'Cookie': 'edition_redirect=1; gtm_id=GTM-PG97WS;' # Cookie simulada
+                'Cookie': 'edition_redirect=1; gtm_id=GTM-PG97WS;'
             }
             
-            # --- PAUSA DE SEGURIDAD ---
-            # Esperamos un tiempo aleatorio entre 5 y 10 segundos
+            # Pausa aleatoria para no parecer bot
             pausa = random.uniform(5.5, 10.5)
-            print(f"Pausa de seguridad: {pausa:.2f}s para la URL: {url}")
+            print(f"Esperando {pausa:.2f}s...")
             time.sleep(pausa)
             
             res = scraper.get(url, headers=headers, timeout=40)
@@ -55,21 +52,33 @@ class handler(BaseHTTPRequestHandler):
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, "html.parser")
                 
-                # Buscamos el precio usando los selectores dinámicos de Investing
+                # Buscamos el precio
                 tag = soup.find("div", {"data-test": "instrument-price-last"}) or \
                       soup.select_one('span[data-test="instrument-price-last"]') or \
                       soup.find("span", {"id": "last_last"})
                 
                 if tag:
-                    # Extraemos el texto y cambiamos el punto por la coma
-                    valor_puro = tag.get_text(strip=True).replace(',', '') # Quitamos comas de miles si existen
-                    valor_final = valor_puro.replace('.', ',') # Ponemos la coma decimal
-                    print(f"ÉXITO: Valor capturado -> {valor_final}")
-                    return valor_final
+                    # --- LÓGICA DE FORMATO (PUNTO Y COMA) ---
+                    # 1. Limpiamos el texto original (quitamos comas o espacios que traiga la web)
+                    valor_sucio = tag.get_text(strip=True).replace(',', '')
+                    
+                    try:
+                        # 2. Convertimos a número decimal
+                        numero = float(valor_sucio)
+                        
+                        # 3. Formateamos: Miles con punto y decimales con coma
+                        # Primero usamos el formato americano estándar (comma for thousands, dot for decimal)
+                        # Y luego invertimos los símbolos.
+                        formato_inicial = "{:,.2f}".format(numero)
+                        valor_final = formato_inicial.replace(',', 'X').replace('.', ',').replace('X', '.')
+                        
+                        print(f"VALOR FORMATEADO: {valor_final}")
+                        return valor_final
+                    except:
+                        return valor_sucio
                 
                 return "Tag_No_Encontrado"
             
-            print(f"BLOQUEO: Código de estado {res.status_code}")
             return f"Error_{res.status_code}"
             
         except Exception as e:
@@ -79,50 +88,38 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         global cache_investing
         
-        # Links de las versiones en español
         hierro_url = "https://es.investing.com/commodities/iron-ore-62-cfr-futures"
         carbon_url = "https://es.investing.com/commodities/rotterdam-coal-futures"
         
         ahora = time.time()
-        # Timer de 2 horas para no quemar la IP (7200 segundos)
-        TIEMPO_CACHE = 7200 
+        TIEMPO_CACHE = 7200 # 2 horas
 
-        # Verificamos si tenemos datos frescos en la caché
         if cache_investing["hierro"] and (ahora - cache_investing["timestamp"] < TIEMPO_CACHE):
             h_val = cache_investing["hierro"]
             c_val = cache_investing["carbon"]
-            fuente = "Caché interna (Ahorro de peticiones)"
-            print("Sirviendo desde la caché para evitar baneos.")
+            fuente = "Caché interna (Ahorro créditos)"
         else:
-            print("Caché expirada. Iniciando nuevas peticiones...")
             h_val = self.obtener_precio(hierro_url)
-            
-            # Pausa extra entre una petición y otra para no parecer un bot rápido
-            time.sleep(random.uniform(4, 7))
-            
+            time.sleep(random.uniform(4, 7)) # Pausa entre peticiones
             c_val = self.obtener_precio(carbon_url)
             
-            # Solo guardamos si no hubo errores de bloqueo
             if "Error" not in h_val and "Error" not in c_val:
                 cache_investing["hierro"] = h_val
                 cache_investing["carbon"] = c_val
                 cache_investing["timestamp"] = ahora
                 fuente = "Investing.com (Actualizado)"
             else:
-                fuente = "Error en la actualización / IP Bloqueada"
+                fuente = "Error/Bloqueo detectado"
 
-        # Construcción de la respuesta JSON
         datos = {
             "hierro": h_val,
             "carbon": c_val,
             "fuente": fuente,
-            "moneda": "USD",
             "status": "online" if "Error" not in h_val else "blocked"
         }
 
-        # Envío de headers y respuesta
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*') # Permitir llamadas desde cualquier web
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(datos).encode('utf-8'))
